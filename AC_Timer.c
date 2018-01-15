@@ -48,6 +48,10 @@ unsigned long power_off_time;
 unsigned long debounce_start;
 unsigned char button_state;
 
+// This is a millisecond counter... but 0 is not allowed as a value.
+// This can mean that time measurements might be off by 1 ms under
+// certain circumstances, but that's not significant, and it makes
+// it a lot easier to define 0 as a sort of "NULL" equivalent.
 static inline unsigned long millis() {
 	unsigned long out;
 	ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
