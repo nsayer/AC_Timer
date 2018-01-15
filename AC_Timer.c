@@ -76,6 +76,7 @@ unsigned char check_button() {
 	if (button == button_state) {
 		return 0; // nothing has changed
 	} else {
+		debounce_start = now; // start debouncing
 		button_state = button;
 		return button != 0;
 	}
