@@ -44,7 +44,7 @@
 volatile unsigned long millis_cnt;
 volatile unsigned int cycle_pos;
 
-unsigned long power_off_time;
+unsigned long power_on_time;
 unsigned long debounce_start;
 unsigned char button_state;
 
@@ -109,7 +109,7 @@ void __ATTR_NORETURN__ main(void) {
 
 	debounce_start = 0;
 	button_state = 0;
-	power_off_time = 0;
+	power_on_time = 0;
 
 	sei(); // turn on interrupts
 
@@ -119,22 +119,22 @@ void __ATTR_NORETURN__ main(void) {
 		unsigned long now = millis();
 
 		if (check_button()) {
-			if (power_off_time) {
+			if (power_on_time) {
 				// power is on
-				power_off_time = 0;
+				power_on_time = 0;
 				PORTB &= ~_BV(0); // turn it off
 				continue;
 			} else {
 				// schedule the turn-off
-				power_off_time = now + POWER_OFF_TIME;
+				power_on_time = now;
 				PORTB |= _BV(0); // turn it on
 				continue;
 			}
 		}
 
 		// Are we there yet?
-		if (now > power_off_time) {
-			power_off_time = 0;
+		if (power_on_time != 0 && ((now - power_on_time) > POWER_OFF_TIME)) {
+			power_on_time = 0;
 			PORTB &= ~_BV(0); // turn it off
 			continue;
 		}
