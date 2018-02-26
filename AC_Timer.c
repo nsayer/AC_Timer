@@ -41,6 +41,9 @@
 // Turn off after 30 minutes
 #define POWER_OFF_TIME (30 * 60 * 1000UL)
 
+// Turn on the "warning" light 5 minutes before the end
+#define WARN_TIME (25 * 60 * 1000UL)
+
 volatile unsigned long millis_cnt;
 volatile unsigned int cycle_pos;
 
@@ -104,8 +107,8 @@ void __ATTR_NORETURN__ main(void) {
 
 	// pin 0 is the power output
 	// pin 1 is the button
-	PORTB = _BV(1); // pull-up the button, turn off the output
-	DDRB = _BV(0);
+	PORTB = _BV(1); // pull-up the button, turn off the outputs
+	DDRB = _BV(0) | _BV(2); // opto and warn LEDs output
 
 	debounce_start = 0;
 	button_state = 0;
@@ -122,7 +125,7 @@ void __ATTR_NORETURN__ main(void) {
 			if (power_on_time) {
 				// power is on
 				power_on_time = 0;
-				PORTB &= ~_BV(0); // turn it off
+				PORTB &= ~(_BV(0) | _BV(2)); // turn it off (and warn too)
 				continue;
 			} else {
 				// schedule the turn-off
@@ -135,7 +138,13 @@ void __ATTR_NORETURN__ main(void) {
 		// Are we there yet?
 		if (power_on_time != 0 && ((now - power_on_time) > POWER_OFF_TIME)) {
 			power_on_time = 0;
-			PORTB &= ~_BV(0); // turn it off
+			PORTB &= ~(_BV(0) | _BV(2)); // turn it off (and warn too)
+			continue;
+		}
+
+		// If the power is on, and it's past the warning time and the WARN light is off...
+		if (power_on_time != 0 && ((now - power_on_time) > WARN_TIME) && (!(PORTB & _BV(2)))) {
+			PORTB |= _BV(2); // turn on the warning light
 			continue;
 		}
 	}
