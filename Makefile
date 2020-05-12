@@ -8,7 +8,7 @@ CHIP = attiny85
 
 CC = avr-gcc
 OBJCPY = avr-objcopy
-AVRDUDE = avrdude -B 0.1
+AVRDUDE = avrdude 
 OPTS = -Os -g -std=c11 -Wall -Wno-main
 
 CFLAGS = -mmcu=$(CHIP) $(OPTS)
@@ -31,6 +31,6 @@ flash:	$(OUT).hex
 	$(AVRDUDE) -c $(PROGRAMMER) -p $(CHIP) -U flash:w:$(OUT).hex
 
 fuse:
-	$(AVRDUDE) -c $(PROGRAMMER) -p $(CHIP) -U hfuse:w:0xdc:m -U lfuse:w:0xe2:m -U efuse:w:0xff:m
+	$(AVRDUDE) -c $(PROGRAMMER) -p $(CHIP) -U hfuse:w:0xdc:m -U lfuse:w:0x62:m -U efuse:w:0xff:m
 
 init:	fuse flash
