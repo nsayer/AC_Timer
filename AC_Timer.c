@@ -19,7 +19,7 @@
     
   */
 
-#define F_CPU (8000000UL)
+#define F_CPU (1000000UL)
 
 #include <stdlib.h>
 #include <avr/io.h>
@@ -28,12 +28,12 @@
 #include <avr/power.h>
 #include <util/atomic.h>
 
-// 8 MHz / 1024 is 7182.5. To get a millisecond timer out of that,
-// divide that by 1000, which is 7.1825, or 7 + 73/400.
+// 1 MHz / 8 is 125,000. To get a millisecond timer out of that,
+// divide that by 1000, which is 125.
 
-#define BASE (7)
-#define CYCLE_COUNT (400)
-#define LONG_CYCLES (73)
+#define BASE (125)
+#define CYCLE_COUNT (0)
+#define LONG_CYCLES (0)
 
 // debounce the button for 50 ms
 #define DEBOUNCE_TIME (50)
@@ -50,16 +50,15 @@
 // WARN is the LED that indicates time is low. Pushing the button once during warning
 // time will just reset the timer without turning off the power.
 #define BIT_WARN (_BV(2))
+// the input bit
+// BUTTON is the button. low = pushed
+#define BIT_BUTTON (_BV(1))
 
 volatile unsigned long millis_cnt;
-volatile unsigned int cycle_pos;
 
 unsigned long power_on_time;
-unsigned long debounce_start;
-unsigned char in_debounce;
-unsigned char button_state;
 
-// This is a millisecond counter.
+// This is a millisecond counter, but it skips over 0
 static inline unsigned long millis() {
 	unsigned long out;
 	ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
@@ -69,30 +68,35 @@ static inline unsigned long millis() {
 }
 
 ISR(TIM0_COMPA_vect) {
-	millis_cnt++;
+	if (++millis_cnt == 0) millis_cnt++; // it can't be zero
+#if (CYCLE_COUNT > 0)
+	static unsigned int cycle_pos;
 	if (cycle_pos++ >= LONG_CYCLES) {
 		OCR0A = BASE + 1;
 	} else {
 		OCR0A = BASE + 2;
 	}
 	if (cycle_pos == CYCLE_COUNT) cycle_pos = 0;
+#endif
 }
 
-unsigned char check_button() {
-	unsigned long now = millis();
-	if (in_debounce && (now - debounce_start) < DEBOUNCE_TIME) {
-		return 0;
-	}
-	in_debounce = 0;
-	unsigned char button = !(PINB & _BV(1)); // 0 means down
-	if (button == button_state) {
-		return 0; // nothing has changed
-	} else {
-		debounce_start = now; // start debouncing
-		in_debounce = 1;
-		button_state = button;
-		return button != 0;
-	}
+static unsigned char check_button() {
+	static unsigned long debounce_time;
+	static unsigned char button_state;
+        unsigned long now = millis();
+        unsigned char status = !(PINB & BIT_BUTTON);
+        if ((button_state == 0) ^ (status == 0)) {
+                // It changed. It must stay stable for a debounce period before we report.
+                button_state = status;
+                debounce_time = now;
+                return 0;
+        }
+        if (debounce_time == 0) return 0; // we're not waiting to report
+        if (now - debounce_time > DEBOUNCE_TIME) {
+                debounce_time = 0; // debounce ended without change.
+                return status;
+        }
+        return 0;
 }
 
 void __ATTR_NORETURN__ main(void) {
@@ -105,19 +109,17 @@ void __ATTR_NORETURN__ main(void) {
 
 	// set up timer 0
 	TCCR0A = _BV(WGM01); //
-	TCCR0B = _BV(CS02) | _BV(CS00); // prescale by 1024
+	TCCR0B = _BV(CS01); // prescale by 8
 	TIMSK = _BV(OCIE0A); // OCR0A interrupt only.
-	OCR0A = BASE + 1 + 1; // because it's a long cycle, and it's zero-based and inclusive counting
+#if (CYCLE_COUNT > 0)
+	OCR0A = BASE + 2; // because it's a long cycle, and it's zero-based and inclusive counting
+#else
+	OCR0A = BASE + 1; // it's zero-based and inclusive counting
+#endif
 	millis_cnt = 1;
-	cycle_pos = 0;
 
-	// pin 0 is the power output
-	// pin 1 is the button
-	PORTB = _BV(1); // pull-up the button, turn off the outputs
-	DDRB = _BV(0) | _BV(2); // opto and warn LEDs output
-
-	in_debounce = 0;
-	button_state = 0;
+	PORTB = BIT_BUTTON; // pull-up the button, turn off the outputs
+	DDRB = BIT_POWER | BIT_WARN; // opto and warn LEDs output
 
 	sei(); // turn on interrupts
 
@@ -128,20 +130,19 @@ void __ATTR_NORETURN__ main(void) {
 
 		if (check_button()) {
 			if (PORTB & BIT_POWER) {
-				// power is on
+				// power is on, so either turn it off or cancel the WARN
 				if (PORTB & BIT_WARN) { // warn is turned on
 					power_on_time = now; // reset the timer only
 					PORTB &= ~BIT_WARN; // turn off warn
 				} else {
 					PORTB &= ~(BIT_POWER | BIT_WARN); // turn it off (and warn too)
 				}
-				continue;
 			} else {
-				// schedule the turn-off
+				// power is off, so turn it on and schedule the turn-off
 				power_on_time = now;
 				PORTB |= BIT_POWER; // turn it on
-				continue;
 			}
+			continue;
 		}
 
 		// Are we there yet?
