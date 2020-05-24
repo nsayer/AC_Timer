@@ -101,16 +101,23 @@ static unsigned char check_button() {
 
 void __ATTR_NORETURN__ main(void) {
 	wdt_enable(WDTO_500MS);
-	ADCSRA = 0; // DIE, ADC!!! DIE!!!
-	ACSR = _BV(ACD); // Turn off analog comparator - but was it ever on anyway?
+	ACSR = _BV(ACD); // Turn off analog comparator
 	power_adc_disable();
+#if defined (__AVR_ATtiny25__) | defined(__AVR_ATtiny45__) | defined (__AVR_ATtiny85__)
 	power_usi_disable();
 	power_timer1_disable();
+#endif
 
 	// set up timer 0
-	TCCR0A = _BV(WGM01); //
+#if defined (__AVR_ATtiny25__) | defined(__AVR_ATtiny45__) | defined (__AVR_ATtiny85__)
+	TCCR0A = _BV(WGM01); // CTC mode
 	TCCR0B = _BV(CS01); // prescale by 8
 	TIMSK = _BV(OCIE0A); // OCR0A interrupt only.
+#else
+	TCCR0A = 0;
+	TCCR0B = _BV(WGM02) | _BV(CS01); // prescale by 8, CTC mode
+	TIMSK0 = _BV(OCIE0A); // OCR0A interrupt only.
+#endif
 #if (CYCLE_COUNT > 0)
 	OCR0A = BASE + 2; // because it's a long cycle, and it's zero-based and inclusive counting
 #else
@@ -118,7 +125,12 @@ void __ATTR_NORETURN__ main(void) {
 #endif
 	millis_cnt = 1;
 
+#if defined (__AVR_ATtiny25__) | defined(__AVR_ATtiny45__) | defined (__AVR_ATtiny85__)
 	PORTB = BIT_BUTTON; // pull-up the button, turn off the outputs
+#else
+	PUEB = BIT_BUTTON; // pull-up the button
+#endif
+
 	DDRB = BIT_POWER | BIT_WARN; // opto and warn LEDs output
 
 	sei(); // turn on interrupts
