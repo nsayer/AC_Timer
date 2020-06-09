@@ -28,21 +28,20 @@
 #include <avr/power.h>
 #include <util/atomic.h>
 
-// 1 MHz / 8 is 125,000. To get a millisecond timer out of that,
-// divide that by 1000, which is 125.
+// 1 MHz / 8 is 125,000. Divide that by 10 to get a 10th of a second counter.
 
-#define BASE (125)
+#define BASE (12500)
 #define CYCLE_COUNT (0)
 #define LONG_CYCLES (0)
 
-// debounce the button for 50 ms
-#define DEBOUNCE_TIME (50)
+// debounce the button for 100 ms
+#define DEBOUNCE_TIME (1)
 
 // Turn off after 30 minutes
-#define POWER_OFF_TIME (30 * 60 * 1000UL)
+#define POWER_OFF_TIME (30)
 
 // Turn on the "warning" light 5 minutes before the end
-#define WARN_TIME (25 * 60 * 1000UL)
+#define WARN_TIME (25)
 
 // the two output bits
 // POWER is the optoisolator for the AC power
@@ -54,23 +53,23 @@
 // BUTTON is the button. low = pushed
 #define BIT_BUTTON (_BV(1))
 
-volatile unsigned long millis_cnt;
+volatile uint16_t ticks_cnt;
 
-unsigned long power_on_time;
+uint16_t power_on_time;
 
-// This is a millisecond counter, but it skips over 0
-static inline unsigned long millis() {
-	unsigned long out;
+// This is a second counter, but it skips over 0
+static inline uint16_t __attribute__ ((always_inline)) ticks() {
+	uint16_t out;
 	ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
-		out = millis_cnt;
+		out = ticks_cnt;
 	}
 	return out;
 }
 
 ISR(TIM0_COMPA_vect) {
-	if (++millis_cnt == 0) millis_cnt++; // it can't be zero
+	if (++ticks_cnt == 0) ticks_cnt++; // it can't be zero
 #if (CYCLE_COUNT > 0)
-	static unsigned int cycle_pos;
+	static uint16_t cycle_pos;
 	if (cycle_pos++ >= LONG_CYCLES) {
 		OCR0A = BASE + 1;
 	} else {
@@ -80,11 +79,11 @@ ISR(TIM0_COMPA_vect) {
 #endif
 }
 
-static unsigned char check_button() {
-	static unsigned long debounce_time;
-	static unsigned char button_state;
-        unsigned long now = millis();
-        unsigned char status = !(PINB & BIT_BUTTON);
+static inline uint8_t __attribute__ ((always_inline)) check_button() {
+	static uint16_t debounce_time;
+	static uint8_t button_state;
+        uint16_t now = ticks();
+        uint8_t status = !(PINB & BIT_BUTTON);
         if ((button_state == 0) ^ (status == 0)) {
                 // It changed. It must stay stable for a debounce period before we report.
                 button_state = status;
@@ -100,7 +99,13 @@ static unsigned char check_button() {
 }
 
 void __ATTR_NORETURN__ main(void) {
+#if defined (__AVR_ATtiny25__) | defined(__AVR_ATtiny45__) | defined (__AVR_ATtiny85__)
 	wdt_enable(WDTO_500MS);
+#else
+	// This doesn't take interrupts into account, but they're not on right now anyway.
+	CCP = 0xd8;
+	WDTCSR = _BV(WDE) | _BV(WDP2) | _BV(WDP0); // enable watchdog, half a second.
+#endif
 	ACSR = _BV(ACD); // Turn off analog comparator
 	power_adc_disable();
 #if defined (__AVR_ATtiny25__) | defined(__AVR_ATtiny45__) | defined (__AVR_ATtiny85__)
@@ -123,7 +128,7 @@ void __ATTR_NORETURN__ main(void) {
 #else
 	OCR0A = BASE + 1; // it's zero-based and inclusive counting
 #endif
-	millis_cnt = 1;
+	ticks_cnt = 1;
 
 #if defined (__AVR_ATtiny25__) | defined(__AVR_ATtiny45__) | defined (__AVR_ATtiny85__)
 	PORTB = BIT_BUTTON; // pull-up the button, turn off the outputs
@@ -138,7 +143,7 @@ void __ATTR_NORETURN__ main(void) {
 	while(1) {
 		wdt_reset(); // pet the watchdog
 
-		unsigned long now = millis();
+		uint16_t now = ticks();
 
 		if (check_button()) {
 			if (PORTB & BIT_POWER) {
@@ -157,17 +162,20 @@ void __ATTR_NORETURN__ main(void) {
 			continue;
 		}
 
+		uint16_t elapsed_minutes =  ((now - power_on_time) / (10UL * 60));
+
 		// Are we there yet?
-		if ((PORTB & BIT_POWER) && ((now - power_on_time) > POWER_OFF_TIME)) {
+		if ((PORTB & BIT_POWER) && (elapsed_minutes > POWER_OFF_TIME)) {
 			PORTB &= ~(BIT_POWER | BIT_WARN); // turn it off (and warn too)
 			continue;
 		}
 
 		// If the power is on, and it's past the warning time and the WARN light is off...
-		if (((PORTB & (BIT_POWER | BIT_WARN)) == BIT_POWER) && ((now - power_on_time) > WARN_TIME)) {
+		if (((PORTB & (BIT_POWER | BIT_WARN)) == BIT_POWER) && (elapsed_minutes > WARN_TIME)) {
 			PORTB |= BIT_WARN; // turn on the warning light
 			continue;
 		}
+
 	}
 	__builtin_unreachable();
 }
