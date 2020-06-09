@@ -38,10 +38,10 @@
 #define DEBOUNCE_TIME (1)
 
 // Turn off after 30 minutes
-#define POWER_OFF_TIME (30)
+#define POWER_OFF_TIME (30 * 60 * 10)
 
 // Turn on the "warning" light 5 minutes before the end
-#define WARN_TIME (25)
+#define WARN_TIME (25 * 60 * 10)
 
 // the two output bits
 // POWER is the optoisolator for the AC power
@@ -91,7 +91,7 @@ static inline uint8_t __attribute__ ((always_inline)) check_button() {
                 return 0;
         }
         if (debounce_time == 0) return 0; // we're not waiting to report
-        if (now - debounce_time > DEBOUNCE_TIME) {
+        if (now - debounce_time >= DEBOUNCE_TIME) {
                 debounce_time = 0; // debounce ended without change.
                 return status;
         }
@@ -162,16 +162,14 @@ void __ATTR_NORETURN__ main(void) {
 			continue;
 		}
 
-		uint16_t elapsed_minutes =  ((now - power_on_time) / (10UL * 60));
-
 		// Are we there yet?
-		if ((PORTB & BIT_POWER) && (elapsed_minutes > POWER_OFF_TIME)) {
+		if ((PORTB & BIT_POWER) && (now - power_on_time >= POWER_OFF_TIME)) {
 			PORTB &= ~(BIT_POWER | BIT_WARN); // turn it off (and warn too)
 			continue;
 		}
 
 		// If the power is on, and it's past the warning time and the WARN light is off...
-		if (((PORTB & (BIT_POWER | BIT_WARN)) == BIT_POWER) && (elapsed_minutes > WARN_TIME)) {
+		if (((PORTB & (BIT_POWER | BIT_WARN)) == BIT_POWER) && (now - power_on_time >= WARN_TIME)) {
 			PORTB |= BIT_WARN; // turn on the warning light
 			continue;
 		}
