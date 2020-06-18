@@ -28,20 +28,22 @@
 #include <avr/power.h>
 #include <util/atomic.h>
 
-// 1 MHz / 8 is 125,000. Divide that by 10 to get a 10th of a second counter.
+// 1 MHz / 8 is 125,000. Divide that by 1000 to get a millisecond counter.
 
-#define BASE (12500)
+// BASE is one less than what we actually want, because it's 0 based inclusive counting
+#define BASE (125 - 1)
+// If it's ever required, we can perform fractional counting this way.
 #define CYCLE_COUNT (0)
 #define LONG_CYCLES (0)
 
-// debounce the button for 100 ms
-#define DEBOUNCE_TIME (1)
+// debounce the button for 50 ms
+#define DEBOUNCE_MILLIS (50)
 
 // Turn off after 30 minutes
-#define POWER_OFF_TIME (30 * 60 * 10)
+#define POWER_OFF_TIME (30 * 60)
 
 // Turn on the "warning" light 5 minutes before the end
-#define WARN_TIME (25 * 60 * 10)
+#define WARN_TIME (25 * 60)
 
 // the two output bits
 // POWER is the optoisolator for the AC power
@@ -53,27 +55,37 @@
 // BUTTON is the button. low = pushed
 #define BIT_BUTTON (_BV(1))
 
-volatile uint16_t ticks_cnt;
+volatile uint16_t millis_count, seconds_count;
 
 uint16_t power_on_time;
 
-// This is a second counter, but it skips over 0
-static inline uint16_t __attribute__ ((always_inline)) ticks() {
+static inline uint16_t __attribute__ ((always_inline)) millis() {
 	uint16_t out;
 	ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
-		out = ticks_cnt;
+		out = millis_count;
+	}
+	return out;
+}
+
+static inline uint16_t __attribute__ ((always_inline)) seconds() {
+	uint16_t out;
+	ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
+		out = seconds_count;
 	}
 	return out;
 }
 
 ISR(TIM0_COMPA_vect) {
-	if (++ticks_cnt == 0) ticks_cnt++; // it can't be zero
+	if (++millis_count == 1000) {
+		seconds_count++;
+		millis_count = 0;
+	}
 #if (CYCLE_COUNT > 0)
 	static uint16_t cycle_pos;
 	if (cycle_pos++ >= LONG_CYCLES) {
-		OCR0A = BASE + 1;
+		OCR0A = BASE; // short cycle
 	} else {
-		OCR0A = BASE + 2;
+		OCR0A = BASE + 1; // long cycle
 	}
 	if (cycle_pos == CYCLE_COUNT) cycle_pos = 0;
 #endif
@@ -82,30 +94,28 @@ ISR(TIM0_COMPA_vect) {
 static inline uint8_t __attribute__ ((always_inline)) check_button() {
 	static uint16_t debounce_time;
 	static uint8_t button_state;
-        uint16_t now = ticks();
+	static uint8_t in_debounce;
+        uint16_t now = millis();
         uint8_t status = !(PINB & BIT_BUTTON);
         if ((button_state == 0) ^ (status == 0)) {
                 // It changed. It must stay stable for a debounce period before we report.
                 button_state = status;
                 debounce_time = now;
+                in_debounce = 1;
                 return 0;
         }
-        if (debounce_time == 0) return 0; // we're not waiting to report
-        if (now - debounce_time >= DEBOUNCE_TIME) {
-                debounce_time = 0; // debounce ended without change.
+        if (in_debounce == 0) return 0; // we're not waiting to report
+	int16_t delta = now - debounce_time;
+	if (delta < 0) delta += 1000;
+        if (delta >= DEBOUNCE_MILLIS) {
+                in_debounce = 0; // debounce ended without change.
                 return status;
         }
         return 0;
 }
 
 void __ATTR_NORETURN__ main(void) {
-#if defined (__AVR_ATtiny25__) | defined(__AVR_ATtiny45__) | defined (__AVR_ATtiny85__)
 	wdt_enable(WDTO_500MS);
-#else
-	// This doesn't take interrupts into account, but they're not on right now anyway.
-	CCP = 0xd8;
-	WDTCSR = _BV(WDE) | _BV(WDP2) | _BV(WDP0); // enable watchdog, half a second.
-#endif
 	ACSR = _BV(ACD); // Turn off analog comparator
 	power_adc_disable();
 #if defined (__AVR_ATtiny25__) | defined(__AVR_ATtiny45__) | defined (__AVR_ATtiny85__)
@@ -123,16 +133,19 @@ void __ATTR_NORETURN__ main(void) {
 	TCCR0B = _BV(WGM02) | _BV(CS01); // prescale by 8, CTC mode
 	TIMSK0 = _BV(OCIE0A); // OCR0A interrupt only.
 #endif
+
 #if (CYCLE_COUNT > 0)
-	OCR0A = BASE + 2; // because it's a long cycle, and it's zero-based and inclusive counting
+	OCR0A = BASE + 1; // we start with the long cycle(s)
 #else
-	OCR0A = BASE + 1; // it's zero-based and inclusive counting
+	OCR0A = BASE;
 #endif
-	ticks_cnt = 1;
+
+	millis_count = seconds_count = 0;
 
 #if defined (__AVR_ATtiny25__) | defined(__AVR_ATtiny45__) | defined (__AVR_ATtiny85__)
 	PORTB = BIT_BUTTON; // pull-up the button, turn off the outputs
 #else
+	PORTB = 0; // turn off the outputs
 	PUEB = BIT_BUTTON; // pull-up the button
 #endif
 
@@ -143,7 +156,7 @@ void __ATTR_NORETURN__ main(void) {
 	while(1) {
 		wdt_reset(); // pet the watchdog
 
-		uint16_t now = ticks();
+		uint16_t now = seconds();
 
 		if (check_button()) {
 			if (PORTB & BIT_POWER) {
