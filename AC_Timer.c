@@ -19,6 +19,10 @@
     
   */
 
+// For hardware v1.4.3, POWER and BUTTON are swapped to remove
+// a high-impedance load from the TPID pin.
+#define SWAPPED
+
 #define F_CPU (1000000UL)
 
 #include <stdlib.h>
@@ -45,15 +49,16 @@
 // Turn on the "warning" light 5 minutes before the end
 #define WARN_TIME (25 * 60)
 
-// the two output bits
+#ifdef SWAPPED
 // POWER is the optoisolator for the AC power
-#define BIT_POWER (_BV(0))
+#define BIT_POWER (_BV(1))
+// BUTTON is the button. low = pushed
+#define BIT_BUTTON (_BV(0))
+#else
+#endif
 // WARN is the LED that indicates time is low. Pushing the button once during warning
 // time will just reset the timer without turning off the power.
 #define BIT_WARN (_BV(2))
-// the input bit
-// BUTTON is the button. low = pushed
-#define BIT_BUTTON (_BV(1))
 
 volatile uint16_t millis_count, seconds_count;
 
