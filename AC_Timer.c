@@ -50,15 +50,26 @@
 #define WARN_TIME (25 * 60)
 
 #ifdef SWAPPED
-// POWER is the optoisolator for the AC power
-#define BIT_POWER (_BV(1))
+
 // BUTTON is the button. low = pushed
 #define BIT_BUTTON (_BV(0))
+// WARN is the LED that indicates time is low. Pushing the button once during warning
+// time will just reset the timer without turning off the power.
+#define BIT_WARN (_BV(1))
+// POWER is the optoisolator for the AC power
+#define BIT_POWER (_BV(2))
+
 #else
-#endif
+
+// POWER is the optoisolator for the AC power
+#define BIT_POWER (_BV(0))
+// BUTTON is the button. low = pushed
+#define BIT_BUTTON (_BV(1))
 // WARN is the LED that indicates time is low. Pushing the button once during warning
 // time will just reset the timer without turning off the power.
 #define BIT_WARN (_BV(2))
+
+#endif
 
 volatile uint16_t millis_count, seconds_count;
 
