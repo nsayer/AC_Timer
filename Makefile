@@ -11,9 +11,7 @@ CHIP = attiny9
 CC = avr-gcc
 OBJCPY = avr-objcopy
 AVRDUDE = avrdude 
-OPTS = -Os -g -std=c11 -Wall -Wno-main
-
-CFLAGS = -mmcu=$(CHIP) $(OPTS)
+CFLAGS = -Os -g -mmcu=$(CHIP) -std=c11 -Wall -Wno-main -fno-tree-switch-conversion
 
 %.o: %.c Makefile
 	$(CC) $(CFLAGS) -c -o $@ $<
