@@ -10,28 +10,31 @@ CHIP = attiny9
 
 CC = avr-gcc
 OBJCPY = avr-objcopy
-AVRDUDE = avrdude 
+AVRDUDE = avrdude
+
 CFLAGS = -Os -g -mmcu=$(CHIP) -std=c11 -Wall -Wno-main -fno-tree-switch-conversion
 
-%.o: %.c Makefile
-	$(CC) $(CFLAGS) -c -o $@ $<
-
-%.hex: %.elf
-	$(OBJCPY) -j .text -j .data -O ihex $^ $@
-
-%.elf: %.o
-	$(CC) $(CFLAGS) -o $@ $^
+DUDE_OPTS = -c $(PROGRAMMER) -p $(CHIP)
 
 all:	$(OUT).hex
 
+%.o:	%.c Makefile
+	$(CC) $(CFLAGS) -c -o $@ $<
+
+%.elf:	%.o
+	$(CC) $(CFLAGS) -o $@ $^
+
+%.hex:	%.elf
+	$(OBJCPY) -j .text -j .data -O ihex $^ $@
+
 clean:
-	rm -f *.hex *.elf *.o
+	rm -f *.o *.elf *.hex
 
 flash:	$(OUT).hex
-	$(AVRDUDE) -c $(PROGRAMMER) -p $(CHIP) -U flash:w:$(OUT).hex
+	$(AVRDUDE) $(DUDE_OPTS) -U flash:w:$^
 
 # This is only for the ATTinyx5
 fuse:
-	$(AVRDUDE) -c $(PROGRAMMER) -p $(CHIP) -U hfuse:w:0xdc:m -U lfuse:w:0x62:m -U efuse:w:0xff:m
+	$(AVRDUDE) $(DUDE_OPTS) -U lfuse:w:0x62:m -U hfuse:w:0xdc:m -U efuse:w:0xff:m
 
 init:	fuse flash
