@@ -4,7 +4,9 @@ PROGRAMMER = usbtiny
 
 OUT=AC_Timer
 
-CHIP = attiny85
+# Change this if you're not using a Tiny85
+#CHIP = attiny85
+CHIP = attiny9
 
 CC = avr-gcc
 OBJCPY = avr-objcopy
@@ -22,7 +24,7 @@ CFLAGS = -mmcu=$(CHIP) $(OPTS)
 %.elf: %.o
 	$(CC) $(CFLAGS) -o $@ $^
 
-all:	$(OUT).hex $(OUT).hex
+all:	$(OUT).hex
 
 clean:
 	rm -f *.hex *.elf *.o
@@ -30,6 +32,7 @@ clean:
 flash:	$(OUT).hex
 	$(AVRDUDE) -c $(PROGRAMMER) -p $(CHIP) -U flash:w:$(OUT).hex
 
+# This is only for the ATTinyx5
 fuse:
 	$(AVRDUDE) -c $(PROGRAMMER) -p $(CHIP) -U hfuse:w:0xdc:m -U lfuse:w:0x62:m -U efuse:w:0xff:m
 
