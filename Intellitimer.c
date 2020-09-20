@@ -150,12 +150,14 @@ void __ATTR_NORETURN__ main(void) {
 			continue;
 		}
 		if (PORTB & BIT_LED) {
-			// We want to turn the load on for 30 seconds
-			// every 5 minutes just to exercise the sensor
+			// We want to turn the load on for 60 seconds
+			// every 3-ish minutes (but as a prime number to
+			// try and horse the interval around a bit)
+			// just to exercise the sensor.
 			// This apparently makes the load look "busy"
 			// and the intelliflow keeps the water on.
 			uint8_t is_on = (PORTB & BIT_POWER) != 0;
-			uint8_t should_be = ((now - power_on_time) % 300) < 30;
+			uint8_t should_be = ((now - power_on_time) % 223) < 60;
 			if (is_on ^ should_be) { // if we're changing...
 				// either turn the power on or off.
 				if (should_be) PORTB |= BIT_POWER;
