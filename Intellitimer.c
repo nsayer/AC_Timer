@@ -46,6 +46,8 @@
 #define BIT_BUTTON (_BV(0))
 // POWER is the MOSFET for the load
 #define BIT_POWER (_BV(2))
+// LED is the indicator light
+#define BIT_LED (_BV(1))
 
 volatile uint16_t millis_count, seconds_count;
 
@@ -138,14 +140,27 @@ void __ATTR_NORETURN__ main(void) {
 
 		if (check_button()) {
 			power_on_time = now; // reset the timer
-			PORTB |= BIT_POWER; // Power up
+			PORTB |= BIT_LED | BIT_POWER; // Power up
 			continue;
 		}
 
 		// Are we there yet?
-		if ((PORTB & BIT_POWER) && (now - power_on_time >= POWER_OFF_TIME)) {
-			PORTB &= ~(BIT_POWER); // turn it off
+		if ((PORTB & BIT_LED) && (now - power_on_time >= POWER_OFF_TIME)) {
+			PORTB &= ~(BIT_POWER | BIT_LED); // turn it all off
 			continue;
+		}
+		if (PORTB & BIT_LED) {
+			// We want to turn the load on for 30 seconds
+			// every 5 minutes just to exercise the sensor
+			// This apparently makes the load look "busy"
+			// and the intelliflow keeps the water on.
+			uint8_t is_on = (PORTB & BIT_POWER) != 0;
+			uint8_t should_be = ((now - power_on_time) % 300) < 30;
+			if (is_on ^ should_be) { // if we're changing...
+				// either turn the power on or off.
+				if (should_be) PORTB |= BIT_POWER;
+				else PORTB &= ~BIT_POWER;
+			}
 		}
 	}
 	__builtin_unreachable();
