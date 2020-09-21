@@ -150,7 +150,7 @@ void __ATTR_NORETURN__ main(void) {
 			continue;
 		}
 		if (PORTB & BIT_LED) {
-			// We want to turn the load on for 60 seconds
+			// We want to turn the load on for 120 seconds
 			// every 3-ish minutes (but as a prime number to
 			// try and horse the interval around a bit)
 			// just to exercise the sensor.
