@@ -157,7 +157,7 @@ void __ATTR_NORETURN__ main(void) {
 			// This apparently makes the load look "busy"
 			// and the intelliflow keeps the water on.
 			uint8_t is_on = (PORTB & BIT_POWER) != 0;
-			uint8_t should_be = ((now - power_on_time) % 223) < 60;
+			uint8_t should_be = ((now - power_on_time) % 223) < 120;
 			if (is_on ^ should_be) { // if we're changing...
 				// either turn the power on or off.
 				if (should_be) PORTB |= BIT_POWER;
