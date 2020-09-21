@@ -44,10 +44,10 @@
 
 // BUTTON is the button. low = pushed
 #define BIT_BUTTON (_BV(0))
-// POWER is the MOSFET for the load
-#define BIT_POWER (_BV(2))
 // LED is the indicator light
 #define BIT_LED (_BV(1))
+// POWER is the MOSFET for the load
+#define BIT_POWER (_BV(2))
 
 volatile uint16_t millis_count, seconds_count;
 
@@ -127,9 +127,8 @@ void __ATTR_NORETURN__ main(void) {
 	millis_count = seconds_count = 0;
 
 	PORTB = 0; // turn off the outputs
-	PUEB = BIT_BUTTON | _BV(1); // pull-up the button and the unused pin
-
-	DDRB = BIT_POWER; // power is output
+	PUEB = BIT_BUTTON; // pull-up the button
+	DDRB = BIT_POWER | BIT_LED; // power & LED are output
 
 	sei(); // turn on interrupts
 
