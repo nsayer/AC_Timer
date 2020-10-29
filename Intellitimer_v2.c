@@ -31,6 +31,7 @@
 #include <avr/wdt.h>
 #include <avr/interrupt.h>
 #include <avr/power.h>
+#include <avr/sleep.h>
 #include <util/atomic.h>
 
 // This is the magic value you have to write to CCP to modify protected registers
@@ -80,7 +81,7 @@ void __ATTR_NORETURN__ main(void) {
 	PORTB = BIT_LOAD | BIT_POWER; // turn on the outputs
 	DDRB = BIT_LOAD | BIT_POWER; // power & load are output
 
-	wdt_enable(WDTO_500MS);
+	wdt_enable(WDTO_2S);
 	ACSR = _BV(ACD); // Turn off analog comparator
 	power_adc_disable();
 
@@ -105,10 +106,14 @@ void __ATTR_NORETURN__ main(void) {
 
 	seconds_count = 0;
 
+	set_sleep_mode(SLEEP_MODE_IDLE);
+
 	sei(); // turn on interrupts
 
 	while(1) {
 		wdt_reset(); // pet the watchdog
+
+		sleep_mode();
 
 		uint16_t now = seconds();
 
@@ -119,7 +124,7 @@ void __ATTR_NORETURN__ main(void) {
 		}
 
 		// We want to turn the load on for 120 seconds
-		// every 3-ish minutes (but as a prime number to
+		// every 4-ish minutes (but as a prime number to
 		// try and horse the interval around a bit)
 		// just to exercise the sensor.
 		// This apparently makes the load look "busy"
