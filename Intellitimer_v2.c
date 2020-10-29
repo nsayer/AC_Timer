@@ -33,16 +33,16 @@
 #include <avr/power.h>
 #include <util/atomic.h>
 
-// 1 MHz / 8 is 125,000. Divide that by 1000 to get a millisecond counter.
+// This is the magic value you have to write to CCP to modify protected registers
+#define CCP_MAGIC (0xd8)
+
+// 125 kHz / 8 is 15,625. We want one interrupt per second
 
 // BASE is one less than what we actually want, because it's 0 based inclusive counting
-#define BASE (125 - 1)
+#define BASE (15625 - 1)
 // If it's ever required, we can perform fractional counting this way.
 #define CYCLE_COUNT (0)
 #define LONG_CYCLES (0)
-
-// debounce the button for 50 ms
-#define DEBOUNCE_MILLIS (50)
 
 // Turn off after 6 hours
 #define POWER_OFF_TIME (6 * 3600UL)
@@ -52,15 +52,7 @@
 // LOAD is the MOSFET for the load
 #define BIT_LOAD (_BV(2))
 
-volatile uint16_t millis_count, seconds_count;
-
-static inline uint16_t __attribute__ ((always_inline)) millis() {
-	uint16_t out;
-	ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
-		out = millis_count;
-	}
-	return out;
-}
+volatile uint16_t seconds_count;
 
 static inline uint16_t __attribute__ ((always_inline)) seconds() {
 	uint16_t out;
@@ -71,10 +63,7 @@ static inline uint16_t __attribute__ ((always_inline)) seconds() {
 }
 
 ISR(TIM0_COMPA_vect) {
-	if (++millis_count == 1000) {
-		seconds_count++;
-		millis_count = 0;
-	}
+	seconds_count++;
 #if (CYCLE_COUNT > 0)
 	static uint16_t cycle_pos;
 	if (cycle_pos++ >= LONG_CYCLES) {
@@ -87,15 +76,21 @@ ISR(TIM0_COMPA_vect) {
 }
 
 void __ATTR_NORETURN__ main(void) {
+	// Set up I/O first - we must hold the power on immediately.
+	PORTB = BIT_LOAD | BIT_POWER; // turn on the outputs
+	DDRB = BIT_LOAD | BIT_POWER; // power & load are output
+
 	wdt_enable(WDTO_500MS);
 	ACSR = _BV(ACD); // Turn off analog comparator
 	power_adc_disable();
 
         VLMCSR = _BV(VLM1); // Set VLM up for VLM1H level.
 
-	// Set up I/O first - we must hold the power on immediately.
-	PORTB = BIT_LOAD | BIT_POWER; // turn on the outputs
-	DDRB = BIT_LOAD | BIT_POWER; // power & load are output
+	// Set clock to 125 kHz
+	CCP = CCP_MAGIC;
+	CLKMSR = 0; // 8 MHz oscillator source
+	CCP = CCP_MAGIC;
+	CLKPSR = _BV(CLKPS2) | _BV(CLKPS1); // divide by 64
 
 	// set up timer 0
 	TCCR0A = 0;
@@ -108,7 +103,7 @@ void __ATTR_NORETURN__ main(void) {
 	OCR0A = BASE;
 #endif
 
-	millis_count = seconds_count = 0;
+	seconds_count = 0;
 
 	sei(); // turn on interrupts
 
