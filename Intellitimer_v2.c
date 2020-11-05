@@ -24,7 +24,7 @@
 // and when it's time to end, we turn off the LED pin and
 // wait patiently for death.
 
-#define F_CPU (1000000UL)
+#define F_CPU (125000UL)
 
 #include <stdlib.h>
 #include <avr/io.h>
